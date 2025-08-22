@@ -594,29 +594,313 @@ ORDER BY items,
  HAVING   -- 组级过滤           -- 否
  ORDER BY -- 输出排序顺序        -- 否
  */
-
 -- 测试
-
-SELECT order_num,COUNT(*) AS order_lines
+SELECT order_num,
+    COUNT(*) AS order_lines
 FROM order_items
 GROUP BY order_num
 ORDER BY order_lines;
-
-SELECT vend_id,MIN(prod_price) AS cheapest_item
+SELECT vend_id,
+    MIN(prod_price) AS cheapest_item
 FROM products
 GROUP BY vend_id
 ORDER BY cheapest_item;
-
 SELECT order_num
 FROM order_items
 GROUP BY order_num
 HAVING SUM(quantity) >= 2;
-
-SELECT order_num,SUM(quantity * item_price) AS total_price
+SELECT order_num,
+    SUM(quantity * item_price) AS total_price
 FROM order_items
 GROUP BY order_num
 HAVING SUM(quantity * item_price) > 100
 ORDER BY order_num;
-
 -- 使用子查询
-
+SELECT order_num
+FROM order_items
+WHERE prod_id = 1;
+SELECT cust_id
+FROM orders
+WHERE order_num IN (
+        SELECT order_num
+        FROM order_items
+        WHERE prod_id = 1
+    );
+SELECT cust_name,
+    cust_contact
+FROM customers
+WHERE cust_id IN (
+        SELECT cust_id
+        FROM orders
+        WHERE order_num IN (
+                SELECT order_num
+                FROM order_items
+                WHERE prod_id = 1
+            )
+    )
+ORDER BY cust_id;
+-- 作为计算字段使用子查询
+select cust_name,
+    cust_state,
+    (
+        SELECT COUNT(*)
+        FROM orders
+        WHERE orders.cust_id = customers.cust_id
+    ) AS orders
+FROM customers
+ORDER BY cust_name;
+-- 测试
+SELECT cust_name
+FROM customers
+WHERE cust_id IN (
+        SELECT cust_id
+        FROM orders
+        WHERE orders.order_num IN (
+                SELECT order_num
+                FROM order_items
+                WHERE order_items.item_price >= 30
+            )
+    );
+SELECT cust_id,
+    order_date
+FROM orders
+WHERE order_num IN (
+        SELECT order_num
+        FROM order_items
+        WHERE prod_id = 1
+    )
+ORDER BY order_date;
+SELECT cust_name,
+    cust_email
+FROM customers
+WHERE cust_id IN(
+        SELECT cust_id
+        FROM orders
+        WHERE order_num IN (
+                SELECT order_num
+                FROM order_items
+                WHERE prod_id = 1
+            )
+    )
+ORDER BY cust_name;
+SELECT cust_id,
+    COUNT(order_num) AS order_count,
+    SUM(total_ordered) AS customer_total
+FROM (
+        SELECT cust_id,
+            order_num,
+            (
+                SELECT SUM(quantity * item_price)
+                FROM order_items
+                WHERE order_num = orders.order_num
+            ) AS total_ordered
+        FROM orders
+    ) AS order_totals
+GROUP BY cust_id
+ORDER BY customer_total DESC;
+SELECT prod_name,
+    (
+        SELECT SUM(quantity)
+        FROM order_items
+        WHERE order_items.prod_id = products.prod_id
+    ) AS quant_sold
+FROM products
+ORDER BY quant_sold DESC;
+-- 联结表
+SELECT vend_name,
+    prod_name,
+    prod_price
+FROM vendors,
+    products
+WHERE vendors.vend_id = products.vend_id;
+-- inner join
+SELECT vend_name,
+    prod_name,
+    prod_price
+FROM vendors
+    INNER JOIN products ON vendors.vend_id = products.vend_id;
+-- 联结多个表
+SELECT prod_name,
+    vend_name,
+    prod_price,
+    quantity
+FROM products,
+    vendors,
+    order_items
+WHERE products.vend_id = vendors.vend_id
+    AND products.prod_id = order_items.prod_id
+    AND order_items.order_num = 1;
+SELECT cust_name,
+    cust_contact
+FROM customers,
+    orders,
+    order_items
+WHERE customers.cust_id = orders.cust_id
+    AND orders.order_num = order_items.order_num
+    AND order_items.prod_id = 2;
+-- 测试
+SELECT cust_name,
+    order_num
+FROM customers,
+    orders
+WHERE customers.cust_id = orders.cust_id
+ORDER BY cust_name,
+    order_num;
+SELECT cust_name,
+    order_num
+FROM customers
+    INNER JOIN orders ON customers.cust_id = orders.cust_id
+ORDER BY cust_name,
+    order_num;
+SELECT cust_name,
+    order_num,
+    (
+        SELECT SUM(quantity * item_price)
+        FROM order_items
+        WHERE order_items.order_num = orders.order_num
+    ) AS order_total
+FROM customers,
+    orders
+WHERE customers.cust_id = orders.cust_id
+ORDER BY cust_name,
+    order_num;
+SELECT cust_name,
+    orders.order_num,
+    SUM(order_items.quantity * order_items.item_price) AS order_total
+FROM customers,
+    orders,
+    order_items
+WHERE customers.cust_id = orders.cust_id
+    AND orders.order_num = order_items.order_num
+GROUP BY cust_name,
+    orders.order_num
+ORDER BY cust_name,
+    orders.order_num;
+SELECT cust_name,
+    orders.order_num,
+    SUM(order_items.quantity * order_items.item_price) AS order_total
+FROM customers
+    INNER JOIN orders ON customers.cust_id = orders.cust_id
+    INNER JOIN order_items ON orders.order_num = order_items.order_num
+GROUP BY cust_name,
+    orders.order_num
+ORDER BY cust_name,
+    orders.order_num;
+SELECT o.cust_id,
+    c.cust_name,
+    p.prod_name,
+    SUM(oi.quantity) AS quantity,
+    o.order_date
+FROM orders o,
+    order_items oi,
+    products p,
+    customers c
+WHERE o.order_num = oi.order_num
+    AND oi.prod_id = p.prod_id
+    AND c.cust_id = o.cust_id
+    AND oi.prod_id = 1
+GROUP BY o.cust_id,
+    c.cust_name,
+    p.prod_name,
+    o.order_date
+ORDER BY o.order_date;
+SELECT o.cust_id,
+    c.cust_name,
+    p.prod_name,
+    SUM(oi.quantity) AS quantity,
+    o.order_date
+FROM orders o
+    INNER JOIN order_items oi ON o.order_num = oi.order_num
+    INNER JOIN products p ON oi.prod_id = p.prod_id
+    INNER JOIN customers c ON o.cust_id = c.cust_id
+WHERE oi.prod_id = 1
+GROUP BY o.cust_id,
+    c.cust_name,
+    p.prod_name,
+    o.order_date
+ORDER BY o.order_date;
+SELECT orders.cust_id,
+    customers.cust_email,
+    orders.order_date
+FROM orders,
+    order_items,
+    customers
+WHERE orders.order_num = order_items.order_num
+    AND customers.cust_id = orders.cust_id
+    AND order_items.prod_id = 1
+ORDER BY order_date;
+SELECT orders.cust_id,
+    customers.cust_email,
+    orders.order_date
+FROM orders
+    INNER JOIN order_items ON orders.order_num = order_items.order_num
+    INNER JOIN customers ON orders.cust_id = customers.cust_id
+WHERE order_items.prod_id = 1
+ORDER BY order_date;
+SELECT o.cust_id,
+    o.order_num,
+    SUM(oi.quantity * oi.item_price) AS total_price
+FROM orders o,
+    order_items oi
+WHERE o.order_num = oi.order_num
+GROUP BY o.cust_id,
+    o.order_num
+HAVING SUM(oi.quantity * oi.item_price) > 50
+ORDER BY o.order_num;
+SELECT o.cust_id,
+    o.order_num,
+    SUM(oi.quantity * oi.item_price) AS total_price,
+    c.cust_name
+FROM orders o
+    INNER JOIN order_items oi ON o.order_num = oi.order_num
+    INNER JOIN customers c ON o.cust_id = c.cust_id
+GROUP BY o.cust_id,
+    o.order_num
+HAVING SUM(oi.quantity * oi.item_price) > 50
+ORDER BY c.cust_name;
+-- 创建高级联结
+-- 使用不同类型的联结
+-- 自联结
+SELECT c1.cust_id,
+    c1.cust_name,
+    c1.cust_contact,
+    c1.cust_email,
+    c1.cust_country
+FROM customers AS c1,
+    customers AS c2
+WHERE c1.cust_country = c2.cust_country
+    AND c2.cust_id = 1;
+-- 自然联结
+SELECT C.*,
+    O.order_num,
+    O.order_date,
+    OI.prod_id,
+    OI.quantity,
+    OI.item_price
+FROM customers AS C,
+    Orders AS O,
+    order_items AS OI
+WHERE C.cust_id = O.cust_id
+    AND OI.order_num = O.order_num
+    AND prod_id = 1;
+-- 外联结
+SELECT c.cust_id,
+    o.order_num
+FROM orders o
+    LEFT OUTER JOIN customers c ON o.cust_id = c.cust_id;
+SELECT c.cust_id,
+    o.order_num
+FROM orders o
+    RIGHT OUTER JOIN customers c ON o.cust_id = c.cust_id;
+-- 全外联结
+SELECT Customers.cust_id,
+    Orders.order_num
+FROM Customers
+    FULL OUTER JOIN Orders ON Customers.cust_id = Orders.cust_id;
+-- 使用带聚集函数的联结
+SELECT c.cust_id,
+    COUNT(o.order_num) AS order_count
+FROM customers AS c
+    LEFT OUTER JOIN orders AS o ON c.cust_id = o.cust_id
+GROUP BY c.cust_id
+ORDER BY order_count DESC;
