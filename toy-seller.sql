@@ -553,7 +553,7 @@ WHERE prod_id = 1;
 SELECT MAX(prod_price) AS max_price
 FROM products
 WHERE prod_price <= 20;
--- 分组数据
+-- 10.分组数据
 -- 数据分组
 SELECT vend_id,
     COUNT(*) AS num_prods
@@ -584,7 +584,7 @@ GROUP BY order_num
 HAVING COUNT(*) >= 1
 ORDER BY items,
     order_num;
--- SELECT子句顺序
+-- 11.SELECT子句顺序
 /*
  子 句     -- 说 明            -- 是否必须使用
  SELECT   -- 要返回的列或表达式  -- 是
@@ -706,7 +706,7 @@ SELECT prod_name,
     ) AS quant_sold
 FROM products
 ORDER BY quant_sold DESC;
--- 联结表
+-- 12. 联结表
 SELECT vend_name,
     prod_name,
     prod_price
@@ -858,7 +858,7 @@ GROUP BY o.cust_id,
     o.order_num
 HAVING SUM(oi.quantity * oi.item_price) > 50
 ORDER BY c.cust_name;
--- 创建高级联结
+-- 13. 创建高级联结
 -- 使用不同类型的联结
 -- 自联结
 SELECT c1.cust_id,
@@ -904,3 +904,103 @@ FROM customers AS c
     LEFT OUTER JOIN orders AS o ON c.cust_id = o.cust_id
 GROUP BY c.cust_id
 ORDER BY order_count DESC;
+-- 测试
+SELECT c.cust_name,
+    o.order_num
+FROM customers AS c
+    INNER JOIN orders AS o ON c.cust_id = o.cust_id
+ORDER BY c.cust_name,
+    o.order_num;
+SELECT c.cust_name,
+    o.order_num
+FROM customers AS c
+    LEFT OUTER JOIN orders AS o ON c.cust_id = o.cust_id
+ORDER BY c.cust_name,
+    o.order_num;
+SELECT prod_name,
+    order_num
+FROM products AS p
+    LEFT OUTER JOIN order_items AS oi ON p.prod_id = oi.prod_id
+ORDER BY p.prod_name;
+SELECT prod_name,
+    COUNT(order_num) AS order_count
+FROM products AS p
+    LEFT OUTER JOIN order_items AS oi ON p.prod_id = oi.prod_id
+GROUP BY prod_name
+ORDER BY p.prod_name;
+SELECT v.vend_id,
+    SUM(oi.quantity) AS total_quantity
+FROM vendors AS v
+    INNER JOIN products AS p ON v.vend_id = p.vend_id
+    INNER JOIN order_items AS oi ON oi.prod_id = p.prod_id
+GROUP BY v.vend_id
+ORDER BY v.vend_id;
+-- 14. 组合查询
+-- 任何具有多个WHERE 子句的 SELECT 语句都可以作为一个组合查询
+-- 创建组合查询
+-- 可用 UNION 操作符来组合数条 SQL 查询。利用 UNION，可给出多条SELECT语句，将它们的结果组合成一个结果集
+-- 使用UNION
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_state IN ('MA', 'CA', 'WA')
+UNION
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_name = 'John Smith';
+-- 包含或取消重复的行
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_state IN ('MA', 'CA', 'WA')
+UNION ALL
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_name = 'John Smith';
+-- 对组合查询结果排序
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_state IN ('MA', 'CA', 'WA')
+UNION
+SELECT cust_name,
+    cust_contact,
+    cust_email
+FROM customers
+WHERE cust_name = 'John Smith';
+ORDER BY cust_name,
+    cust_contact;
+-- 测试
+SELECT oi.prod_id,
+    quantity
+FROM order_items AS oi
+    INNER JOIN products AS p ON oi.prod_id = p.prod_id
+WHERE oi.quantity > 2
+UNION
+SELECT oi.prod_id,
+    quantity
+FROM products AS p
+    INNER JOIN order_items AS oi ON oi.prod_id = p.prod_id
+WHERE p.prod_id = 1
+ORDER BY prod_id;
+SELECT oi.prod_id,
+    quantity
+FROM order_items AS oi
+    INNER JOIN products AS p ON oi.prod_id = p.prod_id
+WHERE oi.quantity > 2
+    OR oi.prod_id <> 1
+ORDER BY prod_id;
+SELECT prod_name
+FROM products
+UNION
+SELECT cust_name
+FROM customers
+ORDER BY prod_name;
+-- 插入数据
