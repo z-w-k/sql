@@ -215,6 +215,195 @@ CALL AdjustSalary(1);
 *   **谨慎使用：** 虽然强大，但过多的业务逻辑放入数据库会使应用难以扩展和移植。通常将核心的数据操作和复杂的计算放在存储过程中，而将业务规则放在应用层。
 
 存储过程是 MySQL 中非常强大的工具，熟练掌握它能极大地提升你处理复杂数据库操作的能力和效率。
+# 管理事务处理
+好的，事务处理是数据库系统中至关重要的高级特性。它确保了数据的完整性和一致性。下面我来详细教你如何在 MySQL 中管理事务。
+
+### 1. 什么是事务？
+
+**事务**是一个不可分割的工作单元，它由一组 SQL 操作组成。这些操作要么**全部成功**，要么**全部失败**，不会存在中间状态。
+
+最经典的例子就是**银行转账**：
+1.  从 A 账户扣钱
+2.  向 B 账户加钱
+
+这两个步骤必须作为一个整体来执行。如果第一步成功而第二步失败，会导致钱凭空消失，这是绝对不允许的。事务就是用来防止这种情况发生的。
+
+---
+
+### 2. 事务的四个核心特性 (ACID)
+
+| 特性 | 全称 | 含义 |
+| :--- | :--- | :--- |
+| **A**tomicity | **原子性** | 事务是一个不可分割的整体，要么全部完成，要么全部不完成。 |
+| **C**onsistency | **一致性** | 事务必须使数据库从一个一致状态变换到另一个一致状态。转账前后总金额不变。 |
+| **I**solation | **隔离性** | 多个并发事务之间互不干扰，一个事务的执行不应影响其他事务。 |
+| **D**urability | **持久性** | 一旦事务提交，它对数据库的修改就是永久性的，即使系统故障也不会丢失。 |
+
+---
+
+### 3. MySQL 中的事务管理语句
+
+MySQL 默认使用**自动提交 (AUTOCOMMIT)** 模式，即每一条 SQL 语句都是一个独立的事务，执行后会自动提交。
+
+要手动控制事务，需要使用以下命令：
+
+| 命令 | 作用 |
+| :--- | :--- |
+| `START TRANSACTION;` 或 `BEGIN;` | **开始一个事务**。之后的 SQL 语句不会立即生效，直到提交或回滚。 |
+| `COMMIT;` | **提交事务**。将事务中的所有操作永久保存到数据库。 |
+| `ROLLBACK;` | **回滚事务**。撤销事务中所有未提交的操作，回到事务开始前的状态。 |
+| `SET autocommit = 0;` | **关闭自动提交**模式。此后所有语句都在一个隐式事务中，直到显式执行 `COMMIT` 或 `ROLLBACK`。 |
+| `SET autocommit = 1;` | **开启自动提交**模式（默认）。 |
+
+---
+
+### 4. 基础事务处理示例
+
+假设我们有一个 `bank_accounts` 表：
+
+```sql
+CREATE TABLE bank_accounts (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    account_name VARCHAR(100) NOT NULL,
+    balance DECIMAL(10, 2) NOT NULL DEFAULT 0.00
+);
+
+INSERT INTO bank_accounts (account_name, balance) VALUES
+('Alice', 1000.00),
+('Bob', 500.00);
+```
+
+**示例：实现从 Alice 向 Bob 转账 200 元**
+
+```sql
+-- 1. 开始事务
+START TRANSACTION;
+
+-- 2. 执行一系列操作
+UPDATE bank_accounts SET balance = balance - 200 WHERE account_name = 'Alice';
+UPDATE bank_accounts SET balance = balance + 200 WHERE account_name = 'Bob';
+
+-- 3. 检查是否有错误（通常在应用程序中检查）
+-- 如果没有问题，提交事务
+COMMIT;
+
+-- 如果中途出现问题（如 Alice 余额不足、系统故障），则回滚
+-- ROLLBACK;
+```
+
+**验证结果：**
+```sql
+SELECT * FROM bank_accounts;
+```
+| id | account_name | balance |
+|----|--------------|---------|
+| 1  | Alice        | 800.00  |
+| 2  | Bob          | 700.00  |
+
+---
+
+### 5. 使用 `SAVEPOINT` 实现部分回滚
+
+对于复杂的事务，你可以在事务内部设置**保存点 (Savepoint)**，以便回滚到特定的点，而不是回滚整个事务。
+
+```sql
+START TRANSACTION;
+
+-- 一些操作...
+UPDATE table1 ... ;
+
+-- 设置保存点 point1
+SAVEPOINT point1;
+
+-- 更多操作...
+INSERT INTO table2 ... ;
+
+-- 如果这里的操作失败了，可以回滚到保存点 point1，而不是事务开头
+-- 这样 table1 的更新依然有效
+ROLLBACK TO SAVEPOINT point1;
+
+-- 继续其他操作...
+UPDATE table3 ... ;
+
+-- 最终提交
+COMMIT;
+```
+
+---
+
+### 6. 事务的隔离级别 (Isolation Levels)
+
+这是事务中最高级也最重要的概念。它定义了多个并发事务之间的可见性规则，解决了以下问题：
+*   **脏读 (Dirty Read):** 一个事务读到了另一个**未提交事务**修改的数据。
+*   **不可重复读 (Non-repeatable Read):** 一个事务内，两次读取同一数据，结果不同（因为另一事务**提交了修改**）。
+*   **幻读 (Phantom Read):** 一个事务内，两次查询同一范围的数据，第二次查询看到了第一次没有的**新行**（因为另一事务**提交了插入**）。
+
+MySQL 支持 4 种隔离级别（从宽松到严格）：
+
+| 隔离级别 | 脏读 | 不可重复读 | 幻读 | 性能 |
+| :--- | :--- | :--- | :--- | :--- |
+| **READ UNCOMMITTED** (读未提交) | ❌ 可能 | ❌ 可能 | ❌ 可能 | 最高 |
+| **READ COMMITTED** (读已提交) | ✅ 避免 | ❌ 可能 | ❌ 可能 | 较高 |
+| **REPEATABLE READ** (可重复读) | ✅ 避免 | ✅ 避免 | ❌ 可能 | 中等 **(MySQL InnoDB 默认)** |
+| **SERIALIZABLE** (串行化) | ✅ 避免 | ✅ 避免 | ✅ 避免 | 最低 |
+
+**查看和设置隔离级别：**
+
+```sql
+-- 查看当前会话的隔离级别
+SELECT @@transaction_isolation;
+
+-- 查看全局隔离级别
+SELECT @@global.transaction_isolation;
+
+-- 设置当前会话的隔离级别为 READ COMMITTED
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+
+-- 设置全局隔离级别（需要权限）
+SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+```
+
+**如何选择？**
+*   默认的 `REPEATABLE READ` 在大多数情况下已经足够。
+*   对数据一致性要求极高，且可以接受性能损失时，考虑 `SERIALIZABLE`。
+*   对性能要求极高，且可以容忍一定程度的数据不一致时，考虑 `READ COMMITTED`。
+*   `READ UNCOMMITTED` 很少使用。
+
+---
+
+### 7. 在应用程序中管理事务（最佳实践）
+
+在实际开发中，事务管理通常在应用程序代码中（如 Python, Java, PHP 等）进行，通常遵循以下模式：
+
+**伪代码逻辑：**
+```python
+try:
+    # 1. 开始事务
+    db.start_transaction()
+    
+    # 2. 执行数据库操作
+    db.execute("UPDATE accounts SET balance = balance - 100 WHERE user_id = 1")
+    db.execute("UPDATE accounts SET balance = balance + 100 WHERE user_id = 2")
+    
+    # 3. 如果没有异常，提交事务
+    db.commit()
+    print("Transaction committed successfully!")
+
+except Exception as e:
+    # 4. 如果发生任何异常，回滚事务
+    db.rollback()
+    print(f"Transaction failed: {e}. Rolling back.")
+```
+
+### 总结
+
+1.  **核心命令：** `START TRANSACTION;` -> `SQL Operations` -> `COMMIT;` (成功) 或 `ROLLBACK;` (失败)。
+2.  **ACID 原则：** 理解原子性、一致性、隔离性、持久性是理解事务的基础。
+3.  **隔离级别：** 理解不同隔离级别解决的问题（脏读、不可重复读、幻读），并根据业务需求选择合适的级别。通常使用默认即可。
+4.  **应用层控制：** 在代码中使用 `try...except...` 块来确保事务的正确提交或回滚，这是最可靠的方式。
+5.  **保持事务简短：** 事务应尽可能短小高效，长时间的事务会锁定资源，影响数据库并发性能。
+
+熟练掌握事务处理，是你从编写简单 SQL 脚本迈向开发健壮、可靠企业级应用的关键一步。
 
 # 游标
 ## 什么是游标？
